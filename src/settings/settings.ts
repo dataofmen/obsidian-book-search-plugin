@@ -29,6 +29,7 @@ export interface BookSearchPluginSettings {
   naverClientSecret: string;
   localePreference: string;
   apiKey: string;
+  nlApiKey: string; // 국립중앙도서관 API 키
   openPageOnCompletion: boolean;
   showCoverImageInSearch: boolean;
   enableCoverImageSave: boolean;
@@ -50,6 +51,7 @@ export const DEFAULT_SETTINGS: BookSearchPluginSettings = {
   naverClientSecret: '',
   localePreference: 'default',
   apiKey: '',
+  nlApiKey: '', // 국립중앙도서관 API 키 기본값
   openPageOnCompletion: true,
   showCoverImageInSearch: false,
   enableCoverImageSave: false,
@@ -197,37 +199,93 @@ export class BookSearchSettingTab extends PluginSettingTab {
       serviceProvider: ServiceProvider = this.plugin.settings?.serviceProvider,
     ) => {
       if (serviceProvider === ServiceProvider.naver) {
-        showServiceProviderExtraSettingButton();
+        naverApiSetting.settingEl.show();
+        nlApiSetting.settingEl.hide();
         hideServiceProviderExtraSettingDropdown();
         hideCoverImageEdgeCurlToggle();
-      } else {
-        hideServiceProviderExtraSettingButton();
+      } else if (serviceProvider === ServiceProvider.google) {
+        naverApiSetting.settingEl.hide();
+        nlApiSetting.settingEl.hide();
         showServiceProviderExtraSettingDropdown();
         showCoverImageEdgeCurlToggle();
+      } else if (serviceProvider === ServiceProvider.nl) {
+        naverApiSetting.settingEl.hide();
+        nlApiSetting.settingEl.show();
+        hideServiceProviderExtraSettingDropdown();
+        hideCoverImageEdgeCurlToggle();
       }
     };
+
     new Setting(containerEl)
       .setName('Service Provider')
-      .setDesc('Choose the service provider you want to use to search your books.')
-      .setClass('book-search-plugin__settings--service_provider')
-      .addDropdown(dropDown => {
-        dropDown.addOption(ServiceProvider.google, `${ServiceProvider.google} (Global)`);
-        dropDown.addOption(ServiceProvider.naver, `${ServiceProvider.naver} (Korean)`);
-        dropDown.setValue(this.plugin.settings?.serviceProvider ?? ServiceProvider.google);
-        dropDown.onChange(async value => {
-          const newValue = value as ServiceProvider;
-          toggleServiceProviderExtraSettings(newValue);
-          this.plugin.settings['serviceProvider'] = newValue;
-          await this.plugin.saveSettings();
-        });
-      })
-      .addExtraButton(component => {
-        serviceProviderExtraSettingButton = component.extraSettingsEl;
-        toggleServiceProviderExtraSettings();
-        component.onClick(() => {
-          new SettingServiceProviderModal(this.plugin).open();
-        });
+      .setDesc('Choose a service provider for book search.')
+      .addDropdown(dropdown => {
+        dropdown
+          .addOption(ServiceProvider.google, 'Google Books')
+          .addOption(ServiceProvider.naver, 'Naver Books')
+          .addOption(ServiceProvider.nl, '국립중앙도서관')
+          .setValue(this.plugin.settings.serviceProvider)
+          .onChange(async value => {
+            this.plugin.settings.serviceProvider = value as ServiceProvider;
+            await this.plugin.saveSettings();
+            toggleServiceProviderExtraSettings(value as ServiceProvider);
+          });
       });
+
+    // Naver API Settings
+    const naverApiSettingDesc = document.createDocumentFragment();
+    naverApiSettingDesc.append(
+      '네이버 개발자센터에서 애플리케이션을 등록하고 클라이언트 ID와 시크릿을 발급받으세요. ',
+      naverApiSettingDesc.createEl('a', {
+        text: '자세히 보기',
+        href: 'https://developers.naver.com/docs/common/openapiguide/appregister.md#애플리케이션-등록',
+      }),
+    );
+
+    const naverApiSetting = new Setting(containerEl)
+      .setName('Naver API Settings')
+      .setDesc(naverApiSettingDesc)
+      .addText(text =>
+        text
+          .setPlaceholder('Client ID')
+          .setValue(this.plugin.settings.naverClientId)
+          .onChange(async value => {
+            this.plugin.settings.naverClientId = value;
+            await this.plugin.saveSettings();
+          }),
+      )
+      .addText(text =>
+        text
+          .setPlaceholder('Client Secret')
+          .setValue(this.plugin.settings.naverClientSecret)
+          .onChange(async value => {
+            this.plugin.settings.naverClientSecret = value;
+            await this.plugin.saveSettings();
+          }),
+      );
+
+    // 국립중앙도서관 API Settings
+    const nlApiSettingDesc = document.createDocumentFragment();
+    nlApiSettingDesc.append(
+      '국립중앙도서관 Open API 키를 입력하세요. ',
+      nlApiSettingDesc.createEl('a', {
+        text: '자세히 보기',
+        href: 'https://www.nl.go.kr/NL/contents/N31101030500.do',
+      }),
+    );
+
+    const nlApiSetting = new Setting(containerEl)
+      .setName('국립중앙도서관 API Settings')
+      .setDesc(nlApiSettingDesc)
+      .addText(text =>
+        text
+          .setPlaceholder('API Key')
+          .setValue(this.plugin.settings.nlApiKey)
+          .onChange(async value => {
+            this.plugin.settings.nlApiKey = value;
+            await this.plugin.saveSettings();
+          }),
+      );
 
     preferredLocaleDropdownSetting = new Setting(containerEl)
       .setName('Preferred locale')
@@ -360,5 +418,8 @@ export class BookSearchSettingTab extends PluginSettingTab {
           new Notice('API key Saved');
         });
       });
+
+    // 초기 상태 설정
+    toggleServiceProviderExtraSettings(this.plugin.settings.serviceProvider);
   }
 }
